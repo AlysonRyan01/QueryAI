@@ -1,0 +1,10 @@
+services:
+  db:
+    ports:
+      - "5432:5432"
+  api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      QUERYAI_ALLOW_INSECURE_HTTP: "true"
+      QUERYAI_ENABLE_API_DOCS: "true"
+      QUERYAI_LOG_LEVEL: Debug

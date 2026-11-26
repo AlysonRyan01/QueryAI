@@ -1,0 +1,66 @@
+name: queryai
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-queryai}
+      POSTGRES_DB: ${POSTGRES_DB:-queryai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+    volumes:
+      - queryai-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [queryai]
+
+  api:
+    image: queryai/api:${QUERYAI_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: src/QueryAI.Api/Dockerfile
+      args:
+        VERSION: ${QUERYAI_VERSION:-0.1.0}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-queryai}
+      POSTGRES_DB: ${POSTGRES_DB:-queryai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+      QUERYAI_ADMIN_EMAIL: ${QUERYAI_ADMIN_EMAIL:?Defina QUERYAI_ADMIN_EMAIL no arquivo .env}
+      QUERYAI_ADMIN_PASSWORD: ${QUERYAI_ADMIN_PASSWORD:?Defina QUERYAI_ADMIN_PASSWORD no arquivo .env}
+      QUERYAI_ADMIN_NAME: ${QUERYAI_ADMIN_NAME:-Administrador}
+      QUERYAI_TRUSTED_PROXIES: ${QUERYAI_TRUSTED_PROXIES:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
+      QUERYAI_SESSION_IDLE_HOURS: ${QUERYAI_SESSION_IDLE_HOURS:-8}
+      QUERYAI_ALLOW_INSECURE_HTTP: ${QUERYAI_ALLOW_INSECURE_HTTP:-false}
+      QUERYAI_LOGIN_RATE_LIMIT_PER_MINUTE: ${QUERYAI_LOGIN_RATE_LIMIT_PER_MINUTE:-10}
+      QUERYAI_LOG_LEVEL: ${QUERYAI_LOG_LEVEL:-Information}
+      QUERYAI_ENABLE_API_DOCS: ${QUERYAI_ENABLE_API_DOCS:-false}
+    networks: [queryai]
+
+  web:
+    image: queryai/web:${QUERYAI_VERSION:-latest}
+    build:
+      context: web
+      args:
+        VERSION: ${QUERYAI_VERSION:-0.1.0}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${QUERYAI_HTTP_PORT:-8080}:8080"
+    networks: [queryai]
+
+volumes:
+  queryai-db-data:
+
+networks:
+  queryai:
