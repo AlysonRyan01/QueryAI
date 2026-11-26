@@ -1,0 +1,328 @@
+openapi: 3.1.0
+info:
+  title: QueryAI API — Fundação
+  version: 0.1.0
+  description: |
+    Contrato da feature 001-project-foundation.
+    - Autenticação por cookie de sessão `queryai.session` (HttpOnly, Secure, SameSite=Strict).
+    - Métodos que alteram estado exigem o header `X-Requested-With: QueryAI`.
+    - Erros seguem RFC 9457 (`application/problem+json`) e incluem `traceId` e `code`.
+    - Usuário com `mustChangePassword = true` recebe `403` com `code = password_change_required`
+      em qualquer rota protegida, exceto `/api/auth/me`, `/api/auth/change-password` e
+      `/api/auth/logout`.
+servers:
+  - url: /
+security:
+  - sessionCookie: []
+tags:
+  - name: Operação
+  - name: Autenticação
+  - name: Usuários
+paths:
+  /health/live:
+    get:
+      tags: [Operação]
+      security: []
+      summary: O processo está vivo
+      responses:
+        '200': { $ref: '#/components/responses/Health' }
+  /health/ready:
+    get:
+      tags: [Operação]
+      security: []
+      summary: Pronto para atender (inclui o banco interno)
+      responses:
+        '200': { $ref: '#/components/responses/Health' }
+        '503': { $ref: '#/components/responses/Health' }
+  /api/version:
+    get:
+      tags: [Operação]
+      security: []
+      summary: Versão instalada
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version]
+                properties:
+                  version: { type: string, example: 0.1.0+abc1234 }
+
+  /api/auth/login:
+    post:
+      tags: [Autenticação]
+      security: []
+      parameters: [{ $ref: '#/components/parameters/XRequestedWith' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                password: { type: string, maxLength: 128 }
+      responses:
+        '200':
+          description: Autenticado; define o cookie de sessão
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentUser' }
+        '400': { $ref: '#/components/responses/Problem' }   # validation_failed | https_required
+        '401': { $ref: '#/components/responses/Problem' }   # invalid_credentials (mesma resposta p/ e-mail inexistente ou usuário desativado)
+        '423':
+          description: Conta temporariamente bloqueada (account_locked)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }   # rate_limited (por IP)
+  /api/auth/logout:
+    post:
+      tags: [Autenticação]
+      parameters: [{ $ref: '#/components/parameters/XRequestedWith' }]
+      responses:
+        '204': { description: Sessão encerrada }
+  /api/auth/me:
+    get:
+      tags: [Autenticação]
+      responses:
+        '200':
+          description: Usuário atual
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentUser' }
+        '401': { $ref: '#/components/responses/Problem' }
+  /api/auth/change-password:
+    post:
+      tags: [Autenticação]
+      parameters: [{ $ref: '#/components/parameters/XRequestedWith' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string, maxLength: 128 }
+                newPassword: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '204': { description: Senha alterada; o cookie de sessão é reemitido }
+        '400': { $ref: '#/components/responses/Problem' }   # validation_failed | same_password
+        '401': { $ref: '#/components/responses/Problem' }   # invalid_current_password
+
+  /api/users:
+    get:
+      tags: [Usuários]
+      summary: Lista usuários (Admin)
+      parameters:
+        - { name: search, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, page, pageSize]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/User' } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [Usuários]
+      summary: Cria usuário (Admin)
+      parameters: [{ $ref: '#/components/parameters/XRequestedWith' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, role, temporaryPassword]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 120 }
+                email: { type: string, format: email, maxLength: 254 }
+                role: { $ref: '#/components/schemas/Role' }
+                temporaryPassword: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '201':
+          description: Criado
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }   # email_already_exists
+  /api/users/{id}:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    get:
+      tags: [Usuários]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    put:
+      tags: [Usuários]
+      summary: Edita nome e papel (Admin)
+      parameters: [{ $ref: '#/components/parameters/XRequestedWith' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, role]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 120 }
+                role: { $ref: '#/components/schemas/Role' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }   # last_admin | concurrency_conflict
+  /api/users/{id}/reset-password:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    post:
+      tags: [Usuários]
+      summary: Define senha temporária e desbloqueia (Admin)
+      parameters: [{ $ref: '#/components/parameters/XRequestedWith' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [temporaryPassword]
+              properties:
+                temporaryPassword: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '204': { description: OK }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/users/{id}/deactivate:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    post:
+      tags: [Usuários]
+      parameters: [{ $ref: '#/components/parameters/XRequestedWith' }]
+      responses:
+        '204': { description: Desativado; sessões do usuário invalidadas }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }   # last_admin
+  /api/users/{id}/activate:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    post:
+      tags: [Usuários]
+      parameters: [{ $ref: '#/components/parameters/XRequestedWith' }]
+      responses:
+        '204': { description: Reativado }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: queryai.session
+  parameters:
+    XRequestedWith:
+      name: X-Requested-With
+      in: header
+      required: true
+      schema: { type: string, enum: [QueryAI] }
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Problem:
+      description: Erro (RFC 9457)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Health:
+      description: Estado de saúde
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { type: string, enum: [Healthy, Degraded, Unhealthy] }
+              checks:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    status: { type: string }
+  schemas:
+    Role:
+      type: string
+      enum: [Admin, Analyst]
+    CurrentUser:
+      type: object
+      required: [id, name, email, role, mustChangePassword]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        mustChangePassword: { type: boolean }
+    User:
+      type: object
+      required: [id, name, email, role, isActive, isLockedOut, createdAtUtc]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        isActive: { type: boolean }
+        isLockedOut: { type: boolean }
+        mustChangePassword: { type: boolean }
+        createdAtUtc: { type: string, format: date-time }
+        lastLoginAtUtc: { type: [string, 'null'], format: date-time }
+    Problem:
+      type: object
+      required: [type, title, status, traceId]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code:
+          type: string
+          description: |
+            validation_failed | invalid_credentials | account_locked | rate_limited |
+            https_required | password_change_required | invalid_current_password |
+            same_password | email_already_exists | last_admin | concurrency_conflict |
+            forbidden | not_found | unexpected_error
+        traceId: { type: string }
+        errors:
+          type: object
+          additionalProperties: { type: array, items: { type: string } }

@@ -55,3 +55,29 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# --- QueryAI additions ---
+# .NET local state
+*.user
+*.suo
+.vs/
+*.trx
+
+# Node / web
+node_modules/
+web/dist/
+coverage/
+*.log
+
+# Env / secrets (only the example is versioned)
+.env.*
+!.env.example
+docker-compose.override.yml
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp

@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/QueryAI.Api/QueryAI.Api.csproj" />
+    <Project Path="src/QueryAI.Application/QueryAI.Application.csproj" />
+    <Project Path="src/QueryAI.Domain/QueryAI.Domain.csproj" />
+    <Project Path="src/QueryAI.Infrastructure/QueryAI.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/QueryAI.Api.IntegrationTests/QueryAI.Api.IntegrationTests.csproj" />
+    <Project Path="tests/QueryAI.Application.Tests/QueryAI.Application.Tests.csproj" />
+    <Project Path="tests/QueryAI.ArchitectureTests/QueryAI.ArchitectureTests.csproj" />
+    <Project Path="tests/QueryAI.Domain.Tests/QueryAI.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

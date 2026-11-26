@@ -1,0 +1,18 @@
+using System.Net;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+
+namespace QueryAI.Api.IntegrationTests.Infrastructure;
+
+internal sealed class LoopbackRemoteIpStartupFilter : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+    {
+        app.Use((context, nextMiddleware) =>
+        {
+            context.Connection.RemoteIpAddress ??= IPAddress.Loopback;
+            return nextMiddleware(context);
+        });
+        next(app);
+    };
+}
